@@ -1,20 +1,20 @@
 # terraform-google-bigquery-datastream
 
-Modul for for provisjonering av [Google Datastream](https://cloud.google.com/datastream/docs/overview) of tilhørende ressurer for streaming av data fra en PostgreSQL-database eid av en []() nais-applikasjon.
+Modul for for provisjonering av [Google Datastream](https://cloud.google.com/datastream/docs/overview) for streaming av data fra en PostgreSQL-database eid av en [nais-applikasjon](https://nais.io/).
 
-Modulen er utviklet for bruk internt i Nav, men kan med noen ressurser brukes utenfor, men det er ikke testet på noen som helst måte.
+Modulen er utviklet for bruk internt i Nav, men kan antakelig brukes utenfor med noen endringe, men det er ikke testet på noen som helst måte.
 
 # Forberedelser
 
-Modulen forventer at det finnes en VPC konfiguret med IP-range og brannveggregler sånn at det kan gjøres [VPC Peering](https://cloud.google.com/datastream/docs/create-a-private-connectivity-configuration).
+Modulen forventer at det finnes en [VPC](https://cloud.google.com/vpc/docs/overview) konfiguret med [IP-range](https://cloud.google.com/vpc/docs/ip-addresses) og [brannveggregler](https://cloud.google.com/firewall/docs/firewalls) sånn at det kan gjøres [VPC Peering](https://cloud.google.com/datastream/docs/create-a-private-connectivity-configuration).
 
 Se [flex-bigquery-terraform/datastream-vpc](https://github.com/navikt/flex-bigquery-terraform/blob/main/prod/datastream-vpc.tf) for eksempel.
 
 ## Bruk
 
-Modulen er ikke lagt til i Terraform registry, men kan hentes direkte fra GitHub, hvor tags brukes for versjonering:
+Modulen er ikke lagt til i [Terraform registry](https://registry.terraform.io/), men kan brukes direkte fra GitHub. Tags angir versjon:
 
-```json
+```tf
 module "module_name" {
   source = "git::https://github.com/navikt/terraform-google-bigquery-datastream.git?ref=v1.0.0"
 }
@@ -35,7 +35,9 @@ module "spinnsyn_datastream" {
 
 Se [variables.tf](./variables.tf) for en oversikt over alle input-variabler og standardverdier.
 
-For eksempler på hvordan modulen støtter konfigurering av tilgangskontroll eller filtrering av tabbeller se [flex-bigquery-terraform](https://github.com/navikt/flex-bigquery-terraform/blob/main/prod/datastreams.tf) eller [amt-bigquery-terraform/](https://github.com/navikt/amt-bigquery-terraform/blob/main/prod/datastreams.tf).
+## Eksempler
+
+For komplette eksempler, inkludert hvordan modulen støtter konfigurering av tilgangskontroll og filtrering av tabeller se [flex-bigquery-terraform](https://github.com/navikt/flex-bigquery-terraform/blob/main/prod/datastreams.tf) eller [amt-bigquery-terraform/](https://github.com/navikt/amt-bigquery-terraform/blob/main/prod/datastreams.tf).
 
 ## Resultat
 
@@ -48,7 +50,7 @@ Når en Datastream er ferdig provisjonert er følgende GCP-ressurser provisjoner
 
 ## Teardown
 
-Hvis man fjerner modulen vil Terraform forsøke å fjerne ressursene modulen oppretter. Det vil i utgangspunktet feile siden BigQuery-tabeller opprettet av modulen ikke kan slettes uten at variablen `big_query_dataset_delete_contents_on_destroy` settes til `true`.
+Hvis man fjerner modulen vil Terraform forsøke å fjerne ressursene modulen har opprettet. Det vil i utgangspunktet feile siden BigQuery-tabeller ikke kan slettes uten at variablen `big_query_dataset_delete_contents_on_destroy` settes til `true`.
 
 ## Standardverdier
 
@@ -56,9 +58,9 @@ Modulen er konfigurert med følgende standardverdier:
 
 ### Tilgangskontroll
 
-Følgende verdier settes på [datasettet]() som opprettes:
+Følgende verdier settes på [datasettet](https://cloud.google.com/bigquery/docs/datasets-intro) som opprettes:
 
-```json
+```tf
  default_access_roles = [
     {
       role          = "OWNER"
@@ -81,6 +83,6 @@ Tilgangskontrollverdiene slås sammen med det som måtte legges til ved bruk av 
 
 En Datastreamn kan konfigurerers med ekskludering og/eller inkludering av av `schema`, `tabell` eller `kolonne`.
 
-Modulen angir `  default = [{ schema = "public", tables = [{ table = "flyway_schema_history" }] }]` som standardverdi.
+Modulen angir følgende standardverdi for `exclude_objects`: `default = [{ schema = "public", tables = [{ table = "flyway_schema_history" }] }]`.
 
 `exclude_objects` og `include_objects` som angis som input til moduelen erstatter standardverdier fullt og helt.
