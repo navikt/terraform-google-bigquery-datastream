@@ -83,6 +83,6 @@ Tilgangskontrollverdiene slås sammen med det som måtte legges til ved bruk av 
 
 En Datastreamn kan konfigurerers med ekskludering og/eller inkludering av av `schema`, `tabell` eller `kolonne`.
 
-Modulen angir følgende standardverdi for `exclude_objects`: `default = [{ schema = "public", tables = [{ table = "flyway_schema_history" }] }]`.
+Modulen angir følgende standardverdi for `postgresql_exclude_schemas`: `[{ schema = "public", tables = [{ table = "flyway_schema_history" }] }]`.
 
-`exclude_objects` og `include_objects` som angis som input til moduelen erstatter standardverdier fullt og helt.
+`postgresql_exclude_schemas ` og ` postgresql_include_schemas` som angis som input til modulen erstatter standardverdier fullt og helt.
