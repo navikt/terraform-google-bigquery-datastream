@@ -90,6 +90,7 @@ resource "google_datastream_connection_profile" "postgresql_connection_profile" 
   location              = var.gcp_project["region"]
   display_name          = local.postgres_connection_profile_id
   connection_profile_id = local.postgres_connection_profile_id
+  create_without_validation = false
 
   postgresql_profile {
     hostname = google_compute_instance.compute_instance.network_interface[0].network_ip
@@ -110,6 +111,7 @@ resource "google_datastream_stream" "datastream" {
   desired_state = var.datastream_desired_state
   project       = var.gcp_project["project"]
   location      = var.gcp_project["region"]
+  create_without_validation = false
   labels        = {}
   backfill_all {}
   timeouts {}
