@@ -62,6 +62,8 @@ Proxy-VM-en kjører [Container-Optimized OS](https://cloud.google.com/container-
 
 Tidligere ble containeren startet av «container startup agent» (konlet) via metadata-nøkkelen `gce-container-declaration`, konfigurert med modulen `terraform-google-modules/container-vm`. Denne mekanismen er [utfaset av Google](https://cloud.google.com/compute/docs/containers/migrate-containers), og modulen er derfor fjernet.
 
+Container-Optimized OS har en host-brannmur der `INPUT` har policy `DROP`. Den utfasede container startup agenten åpnet all TCP-, UDP- og ICMP-trafikk automatisk, noe som ikke er dokumentert av Google. `systemd`-tjenesten åpner derfor kun porten proxyen lytter på, ved hver oppstart. Uten denne regelen blir pakkene fra Datastream forkastet av VM-en, og valideringen av connection-profilen feiler med `CONNECTION_TIMEOUT`.
+
 VM-en får en fast intern IP fra `google_compute_address`. Det gjør at Datastreamens connection-profile ikke må oppdateres hver gang VM-en gjenopprettes, for eksempel ved bytte av maskintype eller OS-image.
 
 ## Teardown
