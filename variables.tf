@@ -104,6 +104,30 @@ variable "cloud_sql_proxy_vm_machine_type" {
   default     = "e2-small"
 }
 
+variable "cloud_sql_proxy_vm_image_family" {
+  description = "The Container-Optimized OS image family used for the Cloud SQL Auth Proxy VM."
+  type        = string
+  default     = "cos-129-lts"
+}
+
+variable "cloud_sql_proxy_image" {
+  description = "The Cloud SQL Auth Proxy container image run on the proxy VM."
+  type        = string
+  default     = "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.25.0"
+}
+
+variable "cloud_sql_proxy_use_private_ip" {
+  description = "Connects the Cloud SQL Auth Proxy to the Cloud SQL instance over its private IP instead of its public IP."
+  type        = bool
+  default     = false
+}
+
+variable "cloud_sql_proxy_vm_external_ip_enabled" {
+  description = "Assigns an external IP to the Cloud SQL Auth Proxy VM. Can be disabled if the VPC has Private Google Access or Cloud NAT."
+  type        = bool
+  default     = true
+}
+
 variable "cloud_sql_proxy_logging_enabled" {
   description = "Enables GCP to collect logs from the Cloud SQL Auth Proxy."
   type        = bool

@@ -51,9 +51,18 @@ For komplette eksempler, inkludert hvordan modulen støtter konfigurering av til
 Når en Datastream er ferdig provisjonert er følgende GCP-ressurser provisjonert:
 
 - `google_bigquery_dataset`
+- `google_compute_address`
 - `google_compute_instance`
 - `google_datastream_connection_profile`
 - `google_datastream_stream`
+
+### Cloud SQL Auth Proxy
+
+Proxy-VM-en kjører [Container-Optimized OS](https://cloud.google.com/container-optimized-os/docs), og starter Cloud SQL Auth Proxy som en `systemd`-tjeneste via [cloud-init](https://cloud.google.com/container-optimized-os/docs/how-to/run-container-instance) (metadata-nøkkelen `user-data`). Konfigurasjonen ligger i [cloud-init.yaml.tftpl](./cloud-init.yaml.tftpl).
+
+Tidligere ble containeren startet av «container startup agent» (konlet) via metadata-nøkkelen `gce-container-declaration`, konfigurert med modulen `terraform-google-modules/container-vm`. Denne mekanismen er [utfaset av Google](https://cloud.google.com/compute/docs/containers/migrate-containers), og modulen er derfor fjernet.
+
+VM-en får en fast intern IP fra `google_compute_address`. Det gjør at Datastreamens connection-profile ikke må oppdateres hver gang VM-en gjenopprettes, for eksempel ved bytte av maskintype eller OS-image.
 
 ## Teardown
 
@@ -96,8 +105,24 @@ Modulen angir følgende standardverdi for `postgresql_exclude_schemas`: `[{ sche
 
 ### Andre standardverdier
 
-| Variabel                          | Default      | Beskrivelse                                             |
-|------------------------------------|-------------|----------------------------------------------------------|
-| `datastream_desired_state`         | `RUNNING`   | Sett til `PAUSED` for å opprette Datastream uten å starte den. |
-| `bigquery_table_freshness`         | `3600s`     | Hvor ofte data gjøres tilgjengelig i BigQuery. Kortere tid øker kostnaden. |
-| `cloud_sql_proxy_vm_machine_type`  | `e2-small`  | Maskintype for VM-en som kjører Cloud SQL Auth Proxy.   |
+| Variabel                                 | Default                                            | Beskrivelse                                                                                              |
+|------------------------------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `datastream_desired_state`               | `RUNNING`                                          | Sett til `PAUSED` for å opprette Datastream uten å starte den.                                             |
+| `bigquery_table_freshness`               | `3600s`                                            | Hvor ofte data gjøres tilgjengelig i BigQuery. Kortere tid øker kostnaden.                                 |
+| `cloud_sql_proxy_vm_machine_type`        | `e2-small`                                         | Maskintype for VM-en som kjører Cloud SQL Auth Proxy.                                                      |
+| `cloud_sql_proxy_vm_image_family`        | `cos-129-lts`                                      | Container-Optimized OS-imagefamilien VM-en bruker.                                                         |
+| `cloud_sql_proxy_image`                  | `gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.25.0` | Container-imaget for Cloud SQL Auth Proxy.                                                               |
+| `cloud_sql_proxy_use_private_ip`         | `false`                                            | Sett til `true` for at proxyen skal koble til Cloud SQL over privat IP i stedet for offentlig IP.          |
+| `cloud_sql_proxy_vm_external_ip_enabled` | `true`                                             | Sett til `false` for å fjerne den eksterne IP-en fra VM-en. Krever Private Google Access eller Cloud NAT.   |
+| `cloud_sql_proxy_logging_enabled`        | `false`                                            | Aktiverer Cloud Logging-agenten på VM-en, slik at proxy-loggene havner i Cloud Logging.                    |
+| `cloud_sql_proxy_monitoring_enabled`     | `false`                                            | Aktiverer Cloud Monitoring-agenten på VM-en.                                                               |
+
+### Nettverk uten ekstern IP
+
+Som standard får proxy-VM-en en ekstern IP, fordi proxyen kobler til Cloud SQL-instansen over dens offentlige IP. For å kjøre VM-en uten ekstern IP må VPC-en først settes opp slik at proxyen fortsatt når Cloud SQL Admin API:
+
+1. Slå på [Private Google Access](https://cloud.google.com/vpc/docs/private-google-access) på subnettet (eller sett opp [Cloud NAT](https://cloud.google.com/nat/docs/overview)).
+2. Sørg for at Cloud SQL-instansen har privat IP i den samme VPC-en, og sett `cloud_sql_proxy_use_private_ip = true`.
+3. Sett `cloud_sql_proxy_vm_external_ip_enabled = false`.
+
+Bruker man en custom mode VPC må subnettets navn angis med nøkkelen `subnetwork_name` i `datastream_vpc_resources`. I en auto mode VPC utledes navnet fra `vpc_name`.
