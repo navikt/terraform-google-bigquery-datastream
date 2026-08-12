@@ -122,6 +122,12 @@ variable "cloud_sql_proxy_use_private_ip" {
   default     = false
 }
 
+variable "cloud_sql_proxy_startup_delay" {
+  description = "How long to wait after the proxy VM is created before Datastream validates the connection, giving cloud-init time to start the proxy."
+  type        = string
+  default     = "90s"
+}
+
 variable "cloud_sql_proxy_vm_external_ip_enabled" {
   description = "Assigns an external IP to the Cloud SQL Auth Proxy VM. Can be disabled if the VPC has Private Google Access or Cloud NAT."
   type        = bool

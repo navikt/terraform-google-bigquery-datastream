@@ -119,11 +119,29 @@ resource "google_compute_instance" "compute_instance" {
   }
 }
 
+// Terraform anser VM-en som opprettet når Compute Engine melder RUNNING. På det tidspunktet har
+// ikke cloud-init rukket å hente containeren og starte proxyen, noe som tar rundt et minutt.
+// Datastream validerer tilkoblingen synkront når connection-profilen opprettes eller endres, og
+// gir opp etter omtrent 2,5 minutter. Uten denne pausen feiler derfor en andel av kjøringene med
+// CONNECTION_TIMEOUT, og må kjøres på nytt. Feilen er forbigående, men oppstår oftere når flere
+// VM-er opprettes samtidig og konkurrerer om å hente containeren.
+//
+// `triggers` sørger for at pausen kjøres på nytt hver gang VM-en byttes ut. Uten den ville
+// `time_sleep` bare ventet den aller første gangen den ble opprettet.
+resource "time_sleep" "wait_for_cloud_sql_proxy" {
+  depends_on      = [google_compute_instance.compute_instance]
+  create_duration = var.cloud_sql_proxy_startup_delay
+
+  triggers = {
+    compute_instance_id = google_compute_instance.compute_instance.id
+  }
+}
+
 resource "google_datastream_connection_profile" "postgresql_connection_profile" {
-  // Hostnavnet leses fra den reserverte IP-en, ikke fra VM-en. Uten denne avhengigheten kan
-  // Terraform opprette connection-profilen før proxy-VM-en finnes, og valideringen av
-  // tilkoblingen vil da feile med CONNECTION_TIMEOUT.
-  depends_on = [google_compute_instance.compute_instance]
+  // Hostnavnet leses fra den reserverte IP-en, og ikke fra VM-en. Den implisitte avhengigheten
+  // mot VM-en forsvant derfor da den faste IP-en ble innført, og settes her eksplisitt via
+  // pausen over. Uten denne kan Terraform opprette connection-profilen før proxy-VM-en finnes.
+  depends_on = [time_sleep.wait_for_cloud_sql_proxy]
 
   location              = var.gcp_project["region"]
   display_name          = local.postgres_connection_profile_id

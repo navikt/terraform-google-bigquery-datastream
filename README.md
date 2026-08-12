@@ -64,6 +64,14 @@ Tidligere ble containeren startet av «container startup agent» (konlet) via me
 
 Container-Optimized OS har en host-brannmur der `INPUT` har policy `DROP`. Den utfasede container startup agenten åpnet all TCP-, UDP- og ICMP-trafikk automatisk, noe som ikke er dokumentert av Google. `systemd`-tjenesten åpner derfor kun porten proxyen lytter på, ved hver oppstart. Uten denne regelen blir pakkene fra Datastream forkastet av VM-en, og valideringen av connection-profilen feiler med `CONNECTION_TIMEOUT`.
 
+### Oppstartsrekkefølge
+
+Terraform anser proxy-VM-en som opprettet når Compute Engine melder `RUNNING`. På det tidspunktet har ikke cloud-init rukket å hente containeren og starte proxyen, noe som tar rundt et minutt. Datastream validerer tilkoblingen synkront når connection-profilen opprettes eller endres, og gir opp etter omtrent 2,5 minutter.
+
+Modulen venter derfor i `cloud_sql_proxy_startup_delay` mellom opprettelsen av VM-en og connection-profilen. Uten denne pausen feiler en andel av kjøringene med `CONNECTION_TIMEOUT` og må kjøres på nytt.
+
+Venting er implementert med [`time_sleep`](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep), og modulen krever derfor provideren `hashicorp/time`.
+
 VM-en får en fast intern IP fra `google_compute_address`. Det gjør at Datastreamens connection-profile ikke må oppdateres hver gang VM-en gjenopprettes, for eksempel ved bytte av maskintype eller OS-image.
 
 ## Teardown
@@ -107,17 +115,18 @@ Modulen angir følgende standardverdi for `postgresql_exclude_schemas`: `[{ sche
 
 ### Andre standardverdier
 
-| Variabel                                 | Default                                            | Beskrivelse                                                                                              |
-|------------------------------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| `datastream_desired_state`               | `RUNNING`                                          | Sett til `PAUSED` for å opprette Datastream uten å starte den.                                             |
-| `bigquery_table_freshness`               | `3600s`                                            | Hvor ofte data gjøres tilgjengelig i BigQuery. Kortere tid øker kostnaden.                                 |
-| `cloud_sql_proxy_vm_machine_type`        | `e2-small`                                         | Maskintype for VM-en som kjører Cloud SQL Auth Proxy.                                                      |
-| `cloud_sql_proxy_vm_image_family`        | `cos-129-lts`                                      | Container-Optimized OS-imagefamilien VM-en bruker.                                                         |
+| Variabel                                 | Default                                              | Beskrivelse                                                                                              |
+|------------------------------------------|------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `datastream_desired_state`               | `RUNNING`                                            | Sett til `PAUSED` for å opprette Datastream uten å starte den.                                           |
+| `bigquery_table_freshness`               | `3600s`                                              | Hvor ofte data gjøres tilgjengelig i BigQuery. Kortere tid øker kostnaden.                               |
+| `cloud_sql_proxy_vm_machine_type`        | `e2-small`                                           | Maskintype for VM-en som kjører Cloud SQL Auth Proxy.                                                    |
+| `cloud_sql_proxy_vm_image_family`        | `cos-129-lts`                                        | Container-Optimized OS-imagefamilien VM-en bruker.                                                       |
 | `cloud_sql_proxy_image`                  | `gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.25.0` | Container-imaget for Cloud SQL Auth Proxy.                                                               |
-| `cloud_sql_proxy_use_private_ip`         | `false`                                            | Sett til `true` for at proxyen skal koble til Cloud SQL over privat IP i stedet for offentlig IP.          |
-| `cloud_sql_proxy_vm_external_ip_enabled` | `true`                                             | Sett til `false` for å fjerne den eksterne IP-en fra VM-en. Krever Private Google Access eller Cloud NAT.   |
-| `cloud_sql_proxy_logging_enabled`        | `false`                                            | Aktiverer Cloud Logging-agenten på VM-en, slik at proxy-loggene havner i Cloud Logging.                    |
-| `cloud_sql_proxy_monitoring_enabled`     | `false`                                            | Aktiverer Cloud Monitoring-agenten på VM-en.                                                               |
+| `cloud_sql_proxy_use_private_ip`         | `false`                                              | Sett til `true` for at proxyen skal koble til Cloud SQL over privat IP i stedet for offentlig IP.        |
+| `cloud_sql_proxy_startup_delay`          | `60s`                                                | Ventetid fra proxy-VM-en er opprettet til Datastream validerer tilkoblingen.                             |
+| `cloud_sql_proxy_vm_external_ip_enabled` | `true`                                               | Sett til `false` for å fjerne den eksterne IP-en fra VM-en. Krever Private Google Access eller Cloud NAT.|
+| `cloud_sql_proxy_logging_enabled`        | `false`                                              | Aktiverer Cloud Logging-agenten på VM-en, slik at proxy-loggene havner i Cloud Logging.                  |
+| `cloud_sql_proxy_monitoring_enabled`     | `false`                                              | Aktiverer Cloud Monitoring-agenten på VM-en.                                                             |
 
 ### Nettverk uten ekstern IP
 
