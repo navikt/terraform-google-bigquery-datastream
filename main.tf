@@ -61,10 +61,12 @@ resource "google_compute_address" "cloud_sql_proxy_internal_ip" {
 }
 
 locals {
+  cloud_sql_proxy_port = 5432
+
   // https://github.com/GoogleCloudPlatform/cloud-sql-proxy?tab=readme-ov-file#usage
   cloud_sql_proxy_args = join(" ", compact([
     "--address=0.0.0.0",
-    "--port=5432",
+    "--port=${local.cloud_sql_proxy_port}",
     // Logger som JSON slik at Cloud Logging får med alvorlighetsgrad og struktur.
     "--structured-logs",
     var.cloud_sql_proxy_use_private_ip ? "--private-ip" : "",
@@ -109,6 +111,7 @@ resource "google_compute_instance" "compute_instance" {
       // https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases
       image = var.cloud_sql_proxy_image
       args  = local.cloud_sql_proxy_args
+      port  = local.cloud_sql_proxy_port
     })
     // https://cloud.google.com/container-optimized-os/docs/how-to/logging
     google-logging-enabled    = tostring(var.cloud_sql_proxy_logging_enabled)
@@ -117,12 +120,17 @@ resource "google_compute_instance" "compute_instance" {
 }
 
 resource "google_datastream_connection_profile" "postgresql_connection_profile" {
+  // Hostnavnet leses fra den reserverte IP-en, ikke fra VM-en. Uten denne avhengigheten kan
+  // Terraform opprette connection-profilen før proxy-VM-en finnes, og valideringen av
+  // tilkoblingen vil da feile med CONNECTION_TIMEOUT.
+  depends_on = [google_compute_instance.compute_instance]
+
   location              = var.gcp_project["region"]
   display_name          = local.postgres_connection_profile_id
   connection_profile_id = local.postgres_connection_profile_id
   postgresql_profile {
     hostname = google_compute_address.cloud_sql_proxy_internal_ip.address
-    port     = 5432
+    port     = local.cloud_sql_proxy_port
     username = var.cloud_sql_instance_db_credentials["username"]
     password = var.cloud_sql_instance_db_credentials["password"]
     database = var.cloud_sql_instance_db_name

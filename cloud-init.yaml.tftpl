@@ -16,6 +16,11 @@ write_files:
       After=docker.service network-online.target
 
       [Service]
+      # Container-Optimized OS har en restriktiv host-brannmur der INPUT har policy DROP.
+      # Den utfasede container startup agenten (konlet) åpnet all TCP-, UDP- og ICMP-trafikk
+      # automatisk. Her åpnes kun porten proxyen lytter på. Regelen settes ved hver oppstart av
+      # tjenesten, siden iptables-regler ikke overlever en omstart av VM-en.
+      ExecStartPre=/bin/sh -c '/sbin/iptables -w -C INPUT -p tcp --dport ${port} -j ACCEPT 2>/dev/null || /sbin/iptables -w -I INPUT 1 -p tcp --dport ${port} -j ACCEPT'
       # Rydder opp etter en eventuell container fra forrige oppstart før ny startes.
       ExecStartPre=-/usr/bin/docker rm -f cloud-sql-proxy
       ExecStartPre=/usr/bin/docker pull ${image}
