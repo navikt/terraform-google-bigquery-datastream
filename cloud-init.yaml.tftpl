@@ -1,0 +1,33 @@
+#cloud-config
+
+# Kjører Cloud SQL Auth Proxy som en systemd-tjeneste på Container-Optimized OS.
+# Erstatter den utfasede "container startup agent" (konlet) som ble konfigurert via
+# metadata-nøkkelen `gce-container-declaration`.
+# https://cloud.google.com/container-optimized-os/docs/how-to/run-container-instance
+
+write_files:
+  - path: /etc/systemd/system/cloud-sql-proxy.service
+    permissions: "0644"
+    owner: root
+    content: |
+      [Unit]
+      Description=Cloud SQL Auth Proxy
+      Wants=docker.service network-online.target
+      After=docker.service network-online.target
+
+      [Service]
+      # Rydder opp etter en eventuell container fra forrige oppstart før ny startes.
+      ExecStartPre=-/usr/bin/docker rm -f cloud-sql-proxy
+      ExecStartPre=/usr/bin/docker pull ${image}
+      ExecStart=/usr/bin/docker run --rm --name=cloud-sql-proxy --network=host ${image} ${args}
+      ExecStop=/usr/bin/docker stop cloud-sql-proxy
+      # Tilsvarer `restart_policy = "Always"` i den utfasede container-vm-modulen.
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now cloud-sql-proxy.service

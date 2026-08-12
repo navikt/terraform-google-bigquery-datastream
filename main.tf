@@ -34,23 +34,42 @@ data "google_sql_database_instance" "database_instance" {
   name = var.cloud_sql_instance_name
 }
 
-// You can configure a virtual machine (VM) instance or an instance template to deploy and launch a Docker container.
-// This Google-provided module handles the generation of metadata for deploying containers on GCE instances.
-module "cloud_sql_auth_proxy_container_datastream" {
-  // https://registry.terraform.io/modules/terraform-google-modules/container-vm/google/latest
-  source  = "terraform-google-modules/container-vm/google"
-  version = "~> 3.3"
-  // https://cloud.google.com/container-optimized-os/docs/release-notes
-  cos_image_name = "cos-113-18244-582-104"
-  container = {
-    // https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases
-    image   = "eu.gcr.io/cloudsql-docker/gce-proxy:1.38.2"
-    command = ["/cloud_sql_proxy"]
-    args = [
-      "-instances=${data.google_sql_database_instance.database_instance.connection_name}=tcp:0.0.0.0:5432",
-    ]
-  }
-  restart_policy = "Always"
+// Container-Optimized OS er bygget for å kjøre containere, og inneholder både Docker og cloud-init.
+// https://cloud.google.com/container-optimized-os/docs/release-notes
+data "google_compute_image" "cloud_sql_proxy_vm_image" {
+  project = "cos-cloud"
+  family  = var.cloud_sql_proxy_vm_image_family
+}
+
+// I en auto mode VPC har subnettet samme navn som selve VPC-en. For en custom mode VPC må navnet
+// angis eksplisitt via nøkkelen `subnetwork_name` i `datastream_vpc_resources`.
+data "google_compute_subnetwork" "datastream_subnetwork" {
+  name    = coalesce(try(var.datastream_vpc_resources.subnetwork_name, null), var.datastream_vpc_resources.vpc_name)
+  project = var.gcp_project["project"]
+  region  = var.gcp_project["region"]
+}
+
+// Reserverer en fast intern IP for proxy-VM-en. Uten denne får VM-en en ny IP hver gang den
+// gjenopprettes, noe som endrer `postgresql_profile.hostname` i connection-profilen og dermed
+// tvinger frem en oppdatering av selve Datastreamen.
+resource "google_compute_address" "cloud_sql_proxy_internal_ip" {
+  name         = "${local.cloud_sql_proxy_vm_name}-ip"
+  project      = var.gcp_project["project"]
+  region       = var.gcp_project["region"]
+  address_type = "INTERNAL"
+  subnetwork   = data.google_compute_subnetwork.datastream_subnetwork.id
+}
+
+locals {
+  // https://github.com/GoogleCloudPlatform/cloud-sql-proxy?tab=readme-ov-file#usage
+  cloud_sql_proxy_args = join(" ", compact([
+    "--address=0.0.0.0",
+    "--port=5432",
+    // Logger som JSON slik at Cloud Logging får med alvorlighetsgrad og struktur.
+    "--structured-logs",
+    var.cloud_sql_proxy_use_private_ip ? "--private-ip" : "",
+    data.google_sql_database_instance.database_instance.connection_name,
+  ]))
 }
 
 resource "google_compute_instance" "compute_instance" {
@@ -62,14 +81,21 @@ resource "google_compute_instance" "compute_instance" {
 
   boot_disk {
     initialize_params {
-      image = module.cloud_sql_auth_proxy_container_datastream.source_image
+      image = data.google_compute_image.cloud_sql_proxy_vm_image.self_link
     }
   }
 
   network_interface {
-    network = var.datastream_vpc_resources.vpc_name
-    // Ensures that a Private IP is assigned to the VM.
-    access_config {}
+    network    = var.datastream_vpc_resources.vpc_name
+    subnetwork = data.google_compute_subnetwork.datastream_subnetwork.self_link
+    network_ip = google_compute_address.cloud_sql_proxy_internal_ip.address
+
+    // Tildeler VM-en en ekstern IP. Dette er kun nødvendig hvis VPC-en mangler Private Google
+    // Access eller Cloud NAT, eller hvis proxyen kobler til Cloud SQL over offentlig IP.
+    dynamic "access_config" {
+      for_each = var.cloud_sql_proxy_vm_external_ip_enabled ? [1] : []
+      content {}
+    }
   }
 
   // https://cloud.google.com/compute/docs/access/create-enable-service-accounts-for-instances
@@ -78,11 +104,15 @@ resource "google_compute_instance" "compute_instance" {
   }
 
   metadata = {
-    gce-container-declaration = module.cloud_sql_auth_proxy_container_datastream.metadata_value
-  }
-
-  labels = {
-    container-vm = module.cloud_sql_auth_proxy_container_datastream.vm_container_label
+    // cloud-init erstatter den utfasede metadata-nøkkelen `gce-container-declaration`.
+    user-data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
+      // https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases
+      image = var.cloud_sql_proxy_image
+      args  = local.cloud_sql_proxy_args
+    })
+    // https://cloud.google.com/container-optimized-os/docs/how-to/logging
+    google-logging-enabled    = tostring(var.cloud_sql_proxy_logging_enabled)
+    google-monitoring-enabled = tostring(var.cloud_sql_proxy_monitoring_enabled)
   }
 }
 
@@ -91,7 +121,7 @@ resource "google_datastream_connection_profile" "postgresql_connection_profile" 
   display_name          = local.postgres_connection_profile_id
   connection_profile_id = local.postgres_connection_profile_id
   postgresql_profile {
-    hostname = google_compute_instance.compute_instance.network_interface[0].network_ip
+    hostname = google_compute_address.cloud_sql_proxy_internal_ip.address
     port     = 5432
     username = var.cloud_sql_instance_db_credentials["username"]
     password = var.cloud_sql_instance_db_credentials["password"]
