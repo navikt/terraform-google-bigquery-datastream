@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Terraform module (Norwegian docs, developed for internal use at `nav/navikt`) that provisions a Google Datastream
 pipeline streaming data from a PostgreSQL database on Cloud SQL into BigQuery. There is no build step, package manager,
-or test suite; the entire module is three files: `main.tf`, `variables.tf`, `outputs.tf`.
+or test suite; the entire module is five files: `main.tf`, `variables.tf`, `outputs.tf`, `versions.tf`, and
+`cloud-init.yaml.tftpl` (the cloud-init config that starts the Cloud SQL Auth Proxy on the VM).
 
 ## Commands
 
