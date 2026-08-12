@@ -2,13 +2,20 @@
 
 Modul for for provisjonering av [Google Datastream](https://cloud.google.com/datastream/docs/overview) for streaming av data fra en PostgreSQL-database eid av en [nais-applikasjon](https://nais.io/).
 
-Modulen er utviklet for bruk internt i Nav, men kan antakelig brukes utenfor med noen endringe, men det er ikke testet på noen som helst måte.
+Modulen er utviklet for bruk internt i Nav, men kan antakelig brukes utenfor med noen endringer. Det er ikke testet på noen som helst måte..
 
 # Forberedelser
 
 Modulen forventer at det finnes en [VPC](https://cloud.google.com/vpc/docs/overview) konfiguret med [IP-range](https://cloud.google.com/vpc/docs/ip-addresses) og [brannveggregler](https://cloud.google.com/firewall/docs/firewalls) sånn at det kan gjøres [VPC Peering](https://cloud.google.com/datastream/docs/create-a-private-connectivity-configuration).
 
 Se [flex-bigquery-terraform/datastream-vpc](https://github.com/navikt/flex-bigquery-terraform/blob/main/prod/datastream-vpc.tf) for eksempel.
+
+Modulen oppretter *ikke* selve databasebrukeren, publikasjonen eller replikeringsslotten i PostgreSQL-databasen — disse må finnes fra før:
+
+- En databasebruker (angitt via `cloud_sql_instance_db_credentials`) med `REPLICATION`-rolle og leserettigheter på tabellene som skal streames.
+- En [publikasjon](https://www.postgresql.org/docs/current/sql-createpublication.html) med navnet angitt i `cloud_sql_instance_publication_name` (default: `<cloud_sql_instance_name>_publication`).
+- En [replikeringsslot](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS) med navnet angitt i `cloud_sql_instance_replication_name` (default: `<cloud_sql_instance_name>_replication`), opprettet med `pgoutput`-pluginet.
+- `wal_level` satt til `logical` på Cloud SQL-instansen.
 
 ## Bruk
 
@@ -86,3 +93,11 @@ En Datastreamn kan konfigurerers med ekskludering og/eller inkludering av av `sc
 Modulen angir følgende standardverdi for `postgresql_exclude_schemas`: `[{ schema = "public", tables = [{ table = "flyway_schema_history" }] }]`.
 
 `postgresql_exclude_schemas ` og ` postgresql_include_schemas` som angis som input til modulen erstatter standardverdier fullt og helt.
+
+### Andre standardverdier
+
+| Variabel                          | Default      | Beskrivelse                                             |
+|------------------------------------|-------------|----------------------------------------------------------|
+| `datastream_desired_state`         | `RUNNING`   | Sett til `PAUSED` for å opprette Datastream uten å starte den. |
+| `bigquery_table_freshness`         | `3600s`     | Hvor ofte data gjøres tilgjengelig i BigQuery. Kortere tid øker kostnaden. |
+| `cloud_sql_proxy_vm_machine_type`  | `e2-small`  | Maskintype for VM-en som kjører Cloud SQL Auth Proxy.   |
