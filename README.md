@@ -74,6 +74,16 @@ Venting er implementert med [`time_sleep`](https://registry.terraform.io/provide
 
 VM-en får en fast intern IP fra `google_compute_address`. Det gjør at Datastreamens connection-profile ikke må oppdateres hver gang VM-en gjenopprettes, for eksempel ved bytte av maskintype eller OS-image.
 
+### OS-image
+
+Boot-disken peker på imagefamilien `cloud_sql_proxy_vm_image_family` og ikke på et konkret image. Compute Engine velger dermed det nyeste imaget i familien når VM-en opprettes, mens Terraform-planen holder seg uendret mellom kjøringer.
+
+Konsekvensen er at en VM som allerede finnes ikke får nye OS-patcher av seg selv. For å hente inn et nyere image må VM-en gjenopprettes, enten ved å bytte imagefamilie eller ved `terraform apply -replace`:
+
+```
+terraform apply -replace='module.<modulnavn>.google_compute_instance.compute_instance'
+```
+
 ## Teardown
 
 Hvis man fjerner modulen vil Terraform forsøke å fjerne ressursene modulen har opprettet. Det vil i utgangspunktet feile siden BigQuery-tabeller ikke kan slettes uten at variablen `big_query_dataset_delete_contents_on_destroy` settes til `true`.
