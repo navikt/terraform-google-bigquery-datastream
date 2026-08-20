@@ -34,13 +34,6 @@ data "google_sql_database_instance" "database_instance" {
   name = var.cloud_sql_instance_name
 }
 
-// Container-Optimized OS er bygget for å kjøre containere, og inneholder både Docker og cloud-init.
-// https://cloud.google.com/container-optimized-os/docs/release-notes
-data "google_compute_image" "cloud_sql_proxy_vm_image" {
-  project = "cos-cloud"
-  family  = var.cloud_sql_proxy_vm_image_family
-}
-
 // I en auto mode VPC har subnettet samme navn som selve VPC-en. For en custom mode VPC må navnet
 // angis eksplisitt via nøkkelen `subnetwork_name` i `datastream_vpc_resources`.
 data "google_compute_subnetwork" "datastream_subnetwork" {
@@ -81,9 +74,17 @@ resource "google_compute_instance" "compute_instance" {
   project                   = var.gcp_project["project"]
   zone                      = var.gcp_project["zone"]
 
+  // Container-Optimized OS er bygget for å kjøre containere, og inneholder både Docker og
+  // cloud-init. https://cloud.google.com/container-optimized-os/docs/release-notes
+  //
+  // Det pekes på selve imagefamilien og ikke på et konkret image. Et oppslag med
+  // `google_compute_image` ville gitt self_linken til det nyeste imaget i familien, og siden
+  // `image` er ForceNew ville VM-en blitt gjenopprettet hver gang Google publiserte et nytt
+  // patch-image. Med familie-URL-en velger Compute Engine nyeste image når VM-en faktisk
+  // opprettes, uten at planen endrer seg mellom kjøringer.
   boot_disk {
     initialize_params {
-      image = data.google_compute_image.cloud_sql_proxy_vm_image.self_link
+      image = "projects/cos-cloud/global/images/family/${var.cloud_sql_proxy_vm_image_family}"
     }
   }
 
